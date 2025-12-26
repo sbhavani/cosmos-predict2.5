@@ -39,6 +39,7 @@ services:
       python scripts/train_dynamics.py
         --dataset_dir /data/datasetWM
         --output_dir /outputs/dynamics_training
+        --pretrained_checkpoint /checkpoints/base/post-trained/81edfebe-bd6a-4039-8c1d-737df1a790bf_ema_bf16.pt
         --batch_size 1
         --num_frames 32
         --max_iterations 10000
@@ -74,10 +75,12 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
     volumes:
       - ${DATA_DIR:-../datasetWM}:/data/datasetWM:ro
+      - ${CHECKPOINT_DIR:-../checkpoints}:/checkpoints:ro
       - ${OUTPUT_DIR:-../outputs}:/outputs
     command: >
       python scripts/train_dynamics.py
         --dataset_dir /data/datasetWM
         --output_dir /outputs/dynamics_test
+        --pretrained_checkpoint /checkpoints/base/post-trained/81edfebe-bd6a-4039-8c1d-737df1a790bf_ema_bf16.pt
         --dry_run
         --debug
