@@ -13,7 +13,7 @@
 #       --output_dir /checkpoints/dynamics_training \
 #       --pretrained_checkpoint /checkpoints/cosmos2.5.pt
 
-FROM nvcr.io/nvidia/pytorch:25.01-py3
+FROM nvcr.io/nvidia/pytorch:25.12-py3
 
 # Set working directory
 WORKDIR /workspace/cosmos-predict2.5
@@ -29,12 +29,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy requirements first for better caching
 COPY pyproject.toml uv.lock* ./
 
-# Install uv for faster package management
-RUN pip install --no-cache-dir uv
-
 # Install Python dependencies
-# Note: We install core dependencies needed for dynamics training
-RUN uv pip install --system --no-cache \
+# Using pip with --break-system-packages for externally managed Python in 25.12
+RUN pip install --no-cache-dir --break-system-packages \
     h5py \
     scipy \
     einops \
@@ -42,8 +39,8 @@ RUN uv pip install --system --no-cache \
     hydra-core \
     attrs \
     mediapy \
-    av \
     decord \
+    av \
     imageio \
     imageio-ffmpeg \
     transformers \
@@ -57,8 +54,9 @@ RUN uv pip install --system --no-cache \
 # Copy the entire project
 COPY . .
 
-# Install the project in editable mode
-RUN pip install --no-cache-dir -e .
+# Add project to Python path instead of installing
+# (Avoids dependency on cosmos-oss which is not on PyPI)
+ENV PYTHONPATH=/workspace/cosmos-predict2.5:$PYTHONPATH
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
