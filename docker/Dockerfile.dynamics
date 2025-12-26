@@ -52,7 +52,8 @@ RUN pip install --no-cache-dir --break-system-packages \
     tensorboard \
     loguru \
     megatron-core \
-    fvcore
+    fvcore \
+    boto3
 
 # Copy the entire project
 COPY . .
