@@ -54,6 +54,9 @@ RUN pip install --no-cache-dir --break-system-packages \
 # Copy the entire project
 COPY . .
 
+# Install cosmos-cuda package (version marker required by cosmos_predict2)
+RUN pip install --no-cache-dir --break-system-packages -e packages/cosmos-cuda
+
 # Add project to Python path instead of installing
 # (Avoids dependency on cosmos-oss which is not on PyPI)
 ENV PYTHONPATH=/workspace/cosmos-predict2.5:$PYTHONPATH
