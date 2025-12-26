@@ -54,7 +54,8 @@ RUN pip install --no-cache-dir --break-system-packages \
     megatron-core \
     fvcore \
     boto3 \
-    multi-storage-client
+    multi-storage-client \
+    diffusers
 
 # Copy the entire project
 COPY . .
