@@ -29,33 +29,64 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy requirements first for better caching
 COPY pyproject.toml uv.lock* ./
 
-# Install Python dependencies
+# Install Python dependencies (from cosmos-oss pyproject.toml)
 # Using pip with --break-system-packages for externally managed Python in 25.12
 RUN pip install --no-cache-dir --break-system-packages \
-    h5py \
-    scipy \
-    einops \
-    omegaconf \
-    hydra-core \
+    albumentations \
     attrs \
-    mediapy \
-    decord \
     av \
-    imageio \
-    imageio-ffmpeg \
-    transformers \
-    accelerate \
-    safetensors \
-    sentencepiece \
-    tokenizers \
-    wandb \
-    tensorboard \
-    loguru \
-    megatron-core \
-    fvcore \
+    better-profanity \
     boto3 \
-    multi-storage-client \
-    diffusers
+    click \
+    decord \
+    diffusers \
+    einops \
+    ftfy \
+    fvcore \
+    fastparquet \
+    h5py \
+    huggingface-hub \
+    hydra-core \
+    "imageio[pyav,ffmpeg]" \
+    iopath \
+    ipdb \
+    loguru \
+    mediapy \
+    megatron-core \
+    ml-dtypes \
+    modelscope \
+    "multi-storage-client[boto3,google-cloud-storage,fsspec,observability-otel,msal]" \
+    nltk \
+    numpy \
+    numpydantic \
+    nvidia-ml-py \
+    omegaconf \
+    opencv-python \
+    pandas \
+    pyarrow \
+    peft \
+    pillow \
+    protobuf \
+    pycocotools \
+    pydantic \
+    pyinstrument \
+    pyyaml \
+    "qwen-vl-utils[decord]" \
+    retinaface-py \
+    safetensors \
+    scikit-image \
+    scipy \
+    sentencepiece \
+    setuptools \
+    termcolor \
+    tqdm \
+    "transformers==4.51.3" \
+    typing-extensions \
+    tyro \
+    wandb \
+    webdataset \
+    tensorboard \
+    accelerate
 
 # Copy the entire project
 COPY . .
