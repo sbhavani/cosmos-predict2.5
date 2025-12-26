@@ -53,7 +53,8 @@ RUN pip install --no-cache-dir --break-system-packages \
     loguru \
     megatron-core \
     fvcore \
-    boto3
+    boto3 \
+    multistorageclient
 
 # Copy the entire project
 COPY . .
