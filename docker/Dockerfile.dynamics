@@ -50,7 +50,8 @@ RUN pip install --no-cache-dir --break-system-packages \
     tokenizers \
     wandb \
     tensorboard \
-    loguru
+    loguru \
+    megatron-core
 
 # Copy the entire project
 COPY . .
