@@ -1,0 +1,68 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Dockerfile for dynamics-aware world model training
+#
+# Build:
+#   docker build -f docker/Dockerfile.dynamics -t cosmos-dynamics:latest .
+#
+# Run training:
+#   docker run --gpus all -v /path/to/data:/data -v /path/to/checkpoints:/checkpoints \
+#       cosmos-dynamics:latest python scripts/train_dynamics.py \
+#       --dataset_dir /data/datasetWM \
+#       --output_dir /checkpoints/dynamics_training \
+#       --pretrained_checkpoint /checkpoints/cosmos2.5.pt
+
+FROM nvcr.io/nvidia/pytorch:25.01-py3
+
+# Set working directory
+WORKDIR /workspace/cosmos-predict2.5
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    ffmpeg \
+    libsm6 \
+    libxext6 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better caching
+COPY pyproject.toml uv.lock* ./
+
+# Install uv for faster package management
+RUN pip install --no-cache-dir uv
+
+# Install Python dependencies
+# Note: We install core dependencies needed for dynamics training
+RUN uv pip install --system --no-cache \
+    h5py \
+    scipy \
+    einops \
+    omegaconf \
+    hydra-core \
+    attrs \
+    mediapy \
+    av \
+    decord \
+    imageio \
+    imageio-ffmpeg \
+    transformers \
+    accelerate \
+    safetensors \
+    sentencepiece \
+    tokenizers \
+    wandb \
+    tensorboard
+
+# Copy the entire project
+COPY . .
+
+# Install the project in editable mode
+RUN pip install --no-cache-dir -e .
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV CUDA_DEVICE_ORDER=PCI_BUS_ID
+
+# Default command shows help
+CMD ["python", "scripts/train_dynamics.py", "--help"]

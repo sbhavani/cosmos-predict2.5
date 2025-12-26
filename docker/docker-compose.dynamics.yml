@@ -1,0 +1,83 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Docker Compose for dynamics-aware world model training
+#
+# Usage:
+#   # Build the image
+#   docker-compose -f docker/docker-compose.dynamics.yml build
+#
+#   # Run training
+#   docker-compose -f docker/docker-compose.dynamics.yml run dynamics-train
+#
+#   # Run with custom arguments
+#   docker-compose -f docker/docker-compose.dynamics.yml run dynamics-train \
+#       python scripts/train_dynamics.py --batch_size 2 --max_iterations 5000
+
+services:
+  dynamics-train:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dynamics
+    image: cosmos-dynamics:latest
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_DEVICE_ORDER=PCI_BUS_ID
+      - WANDB_API_KEY=${WANDB_API_KEY:-}
+    volumes:
+      # Mount dataset directory
+      - ${DATA_DIR:-../datasetWM}:/data/datasetWM:ro
+      # Mount checkpoint directory (for pretrained model and saving)
+      - ${CHECKPOINT_DIR:-../checkpoints}:/checkpoints
+      # Mount output directory
+      - ${OUTPUT_DIR:-../outputs}:/outputs
+      # Optional: Mount source for development
+      - ..:/workspace/cosmos-predict2.5:rw
+    working_dir: /workspace/cosmos-predict2.5
+    command: >
+      python scripts/train_dynamics.py
+        --dataset_dir /data/datasetWM
+        --output_dir /outputs/dynamics_training
+        --batch_size 1
+        --num_frames 32
+        --max_iterations 10000
+        --save_interval 1000
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # Compute normalization statistics
+  compute-stats:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dynamics
+    image: cosmos-dynamics:latest
+    volumes:
+      - ${DATA_DIR:-../datasetWM}:/data/datasetWM:rw
+    command: >
+      python scripts/compute_dynamics_stats.py
+        --dataset_dir /data/datasetWM
+
+  # Dry run for testing
+  dynamics-test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dynamics
+    image: cosmos-dynamics:latest
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - ${DATA_DIR:-../datasetWM}:/data/datasetWM:ro
+      - ${OUTPUT_DIR:-../outputs}:/outputs
+    command: >
+      python scripts/train_dynamics.py
+        --dataset_dir /data/datasetWM
+        --output_dir /outputs/dynamics_test
+        --dry_run
+        --debug
