@@ -202,6 +202,13 @@ cython_debug/
 /results/
 /tmp/
 
+# Large files and datasets
+*.zip
+*.tar.gz
+*.safetensors
+datasetWM/
+test_image/
+
 !assets/**/*.png
 !assets/**/*.jpg
 !assets/**/*.mp4
