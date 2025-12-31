@@ -199,10 +199,12 @@ def create_model(args):
     from cosmos_predict2._src.predict2.networks.minimal_v1_lvg_dit import MinimalV1LVGDiT
     from cosmos_predict2._src.predict2.networks.minimal_v4_dit import SACConfig
     from cosmos_predict2._src.predict2.conditioner import (
-        GeneralConditioner,
         ReMapkey,
         TextAttr,
         BooleanFlag,
+    )
+    from cosmos_predict2._src.predict2.configs.video2world.defaults.conditioner import (
+        Video2WorldConditioner,
     )
 
     # Load dynamics stats
@@ -261,7 +263,7 @@ def create_model(args):
 
     # Create a minimal conditioner config
     # This handles text embeddings and other conditioning signals
-    conditioner_config = L(GeneralConditioner)(
+    conditioner_config = L(Video2WorldConditioner)(
         fps=L(ReMapkey)(
             input_key="fps",
             output_key="fps",
