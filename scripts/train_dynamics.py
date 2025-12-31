@@ -7,17 +7,30 @@ This script demonstrates how to fine-tune a DynamicsWorldModel on a custom
 dataset with kinematics annotations.
 
 Usage:
-    # Basic training
-    python scripts/train_dynamics.py \
-        --dataset_dir datasetWM \
-        --output_dir outputs/dynamics_training
-
-    # With custom settings
+    # Basic training with pretrained checkpoint
     python scripts/train_dynamics.py \
         --dataset_dir datasetWM \
         --output_dir outputs/dynamics_training \
+        --pretrained_checkpoint checkpoints/base/post-trained/81edfebe-bd6a-4039-8c1d-737df1a790bf_ema_bf16.pt \
+        --tokenizer_checkpoint checkpoints/tokenizer.pth
+
+    # Dry run test
+    python scripts/train_dynamics.py \
+        --dataset_dir datasetWM \
+        --output_dir outputs/dynamics_training \
+        --pretrained_checkpoint checkpoints/base/post-trained/81edfebe-bd6a-4039-8c1d-737df1a790bf_ema_bf16.pt \
+        --tokenizer_checkpoint checkpoints/tokenizer.pth \
+        --dry_run
+
+    # Full training with custom settings
+    python scripts/train_dynamics.py \
+        --dataset_dir datasetWM \
+        --output_dir outputs/dynamics_training \
+        --pretrained_checkpoint checkpoints/base/post-trained/81edfebe-bd6a-4039-8c1d-737df1a790bf_ema_bf16.pt \
+        --tokenizer_checkpoint checkpoints/tokenizer.pth \
         --batch_size 1 \
         --num_frames 32 \
+        --max_iterations 10000 \
         --learning_rate 1e-5 \
         --dynamics_loss_weight 0.1
 
@@ -98,6 +111,8 @@ def parse_args():
     # Checkpoint
     parser.add_argument("--pretrained_checkpoint", type=str, default=None,
                         help="Path to pretrained Cosmos 2.5 checkpoint")
+    parser.add_argument("--tokenizer_checkpoint", type=str, default=None,
+                        help="Path to tokenizer checkpoint (tokenizer.pth)")
     parser.add_argument("--resume_from", type=str, default=None,
                         help="Resume training from checkpoint")
 
@@ -169,18 +184,47 @@ def create_dataloader(args):
 def create_model(args):
     """Create dynamics world model.
 
-    Note: This is a simplified version. For full training, you should
-    use the proper model initialization from a pretrained checkpoint.
+    This function creates a DynamicsWorldModel with proper tokenizer configuration.
+    The tokenizer is required to encode/decode video frames to/from latent space.
     """
     from cosmos_predict2._src.predict2.dynamics.models.dynamics_world_model import (
         DynamicsWorldModel,
         DynamicsWorldModelConfig,
     )
+    from cosmos_predict2._src.imaginaire.lazy_config import LazyCall as L
+    from cosmos_predict2._src.predict2.tokenizers.wan2pt1 import Wan2pt1VAEInterface
 
     # Load dynamics stats
     stats = load_dynamics_stats(args.dataset_dir)
 
+    # Determine tokenizer checkpoint path
+    tokenizer_path = args.tokenizer_checkpoint
+    if tokenizer_path is None and args.pretrained_checkpoint:
+        # Try to find tokenizer.pth in the same directory as pretrained checkpoint
+        checkpoint_dir = os.path.dirname(args.pretrained_checkpoint)
+        parent_dir = os.path.dirname(checkpoint_dir)
+        potential_path = os.path.join(parent_dir, "tokenizer.pth")
+        if os.path.exists(potential_path):
+            tokenizer_path = potential_path
+            print(f"  Found tokenizer at: {tokenizer_path}")
+
+    if tokenizer_path is None:
+        raise ValueError(
+            "Tokenizer checkpoint is required. Please provide --tokenizer_checkpoint "
+            "or ensure tokenizer.pth exists alongside the pretrained checkpoint."
+        )
+
+    # Create tokenizer config with local checkpoint path
+    tokenizer_config = L(Wan2pt1VAEInterface)(
+        name="wan2pt1_tokenizer",
+        vae_pth=tokenizer_path,
+        chunk_duration=81,
+    )
+
     config = DynamicsWorldModelConfig(
+        # Tokenizer configuration
+        tokenizer=tokenizer_config,
+
         # Dynamics head settings
         num_object_queries=args.num_object_queries,
         dynamics_hidden_dim=args.dynamics_hidden_dim,
