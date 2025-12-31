@@ -337,9 +337,13 @@ def create_model(args):
             state_dict = checkpoint
 
         # Load with strict=False to allow new dynamics head parameters
-        missing, unexpected = model.load_state_dict(state_dict, strict=False)
-        print(f"  Missing keys: {len(missing)}")
-        print(f"  Unexpected keys: {len(unexpected)}")
+        # Note: The parent class load_state_dict returns None when strict=False
+        result = model.load_state_dict(state_dict, strict=False)
+        if result is not None:
+            print(f"  Missing keys: {len(result.missing_keys)}")
+            print(f"  Unexpected keys: {len(result.unexpected_keys)}")
+        else:
+            print("  Checkpoint loaded (non-strict mode)")
 
     return model
 
