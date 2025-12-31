@@ -52,6 +52,14 @@ from torch.utils.data import DataLoader
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
+# Optional wandb import
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+    print("Warning: wandb not installed. Logging disabled.")
+
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -125,6 +133,14 @@ def parse_args():
                         help="Run one iteration and exit (for testing)")
     parser.add_argument("--debug", action="store_true",
                         help="Enable debug mode with extra logging")
+
+    # Logging
+    parser.add_argument("--wandb", action="store_true",
+                        help="Enable Weights & Biases logging")
+    parser.add_argument("--wandb_project", type=str, default="cosmos-dynamics",
+                        help="W&B project name")
+    parser.add_argument("--wandb_run_name", type=str, default=None,
+                        help="W&B run name (auto-generated if not specified)")
 
     return parser.parse_args()
 
@@ -352,13 +368,38 @@ def create_optimizer(model, args):
     return optimizer
 
 
-def train_step(model, batch, optimizer, device, iteration, args):
-    """Run one training step."""
-    # Move batch to device
+def prepare_batch_for_model(batch, device):
+    """Prepare batch with required fields for the model.
+
+    The conditioner expects t5_text_embeddings and t5_text_mask.
+    If these are not provided (when using raw text captions), we create
+    dummy embeddings to allow training to proceed.
+    """
+    # Move tensors to device
     batch = {
         k: v.to(device) if isinstance(v, torch.Tensor) else v
         for k, v in batch.items()
     }
+
+    # Add dummy text embeddings if not present
+    # The conditioner's TextAttr expects t5_text_embeddings: [B, seq_len, hidden_dim]
+    # For Cosmos 2B model, text embedding dim is typically 4096 (T5-XXL)
+    if 't5_text_embeddings' not in batch:
+        B = batch['video'].shape[0]
+        seq_len = 512  # Standard T5 sequence length
+        hidden_dim = 4096  # T5-XXL hidden dimension
+
+        # Create zero embeddings (model will learn to ignore them)
+        batch['t5_text_embeddings'] = torch.zeros(B, seq_len, hidden_dim, device=device, dtype=torch.bfloat16)
+        batch['t5_text_mask'] = torch.ones(B, seq_len, device=device, dtype=torch.bfloat16)
+
+    return batch
+
+
+def train_step(model, batch, optimizer, device, iteration, args):
+    """Run one training step."""
+    # Prepare batch with required fields
+    batch = prepare_batch_for_model(batch, device)
 
     # Forward pass
     output_dict, loss = model.forward_with_dynamics(batch)
@@ -409,6 +450,20 @@ def main():
     print(f"Output: {args.output_dir}")
     print(f"Device: {args.device}")
     print()
+
+    # Initialize W&B if requested
+    use_wandb = args.wandb and WANDB_AVAILABLE
+    if args.wandb and not WANDB_AVAILABLE:
+        print("Warning: --wandb requested but wandb not installed. Disabling.")
+    if use_wandb:
+        run_name = args.wandb_run_name or f"dynamics_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        wandb.init(
+            project=args.wandb_project,
+            name=run_name,
+            config=vars(args),
+        )
+        print(f"W&B initialized: {args.wandb_project}/{run_name}")
+        print()
 
     # Check device
     device = torch.device(args.device)
@@ -495,19 +550,38 @@ def main():
             iter_per_sec = (iteration - start_iteration + 1) / elapsed if elapsed > 0 else 0
 
             log_str = f"Iter {iteration:6d} | Loss: {loss:.4f}"
+            wandb_log = {"iteration": iteration, "loss/total": loss, "perf/iter_per_sec": iter_per_sec}
 
             if 'video_loss' in output_dict:
-                log_str += f" | Video: {output_dict['video_loss'].item():.4f}"
+                video_loss = output_dict['video_loss'].item()
+                log_str += f" | Video: {video_loss:.4f}"
+                wandb_log["loss/video"] = video_loss
 
             if 'total_dynamics_loss' in output_dict:
-                log_str += f" | Dynamics: {output_dict['total_dynamics_loss'].item():.4f}"
+                dynamics_loss = output_dict['total_dynamics_loss'].item()
+                log_str += f" | Dynamics: {dynamics_loss:.4f}"
+                wandb_log["loss/dynamics"] = dynamics_loss
 
             if 'kinematic_loss' in output_dict:
-                log_str += f" | Kinematic: {output_dict['kinematic_loss'].item():.4f}"
+                kinematic_loss = output_dict['kinematic_loss'].item()
+                log_str += f" | Kinematic: {kinematic_loss:.4f}"
+                wandb_log["loss/kinematic"] = kinematic_loss
+
+            # Log additional metrics if available
+            if 'position_loss' in output_dict:
+                wandb_log["loss/position"] = output_dict['position_loss'].item()
+            if 'velocity_loss' in output_dict:
+                wandb_log["loss/velocity"] = output_dict['velocity_loss'].item()
+            if 'classification_loss' in output_dict:
+                wandb_log["loss/classification"] = output_dict['classification_loss'].item()
 
             log_str += f" | {iter_per_sec:.2f} it/s"
 
             print(log_str)
+
+            # Log to W&B
+            if use_wandb:
+                wandb.log(wandb_log, step=iteration)
 
         # Save checkpoint
         if iteration > 0 and iteration % args.save_interval == 0:
@@ -525,6 +599,10 @@ def main():
     print("\n" + "=" * 60)
     print("Training complete!")
     print("=" * 60)
+
+    # Finalize W&B
+    if use_wandb:
+        wandb.finish()
 
     return 0
 
