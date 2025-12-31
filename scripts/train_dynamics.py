@@ -184,8 +184,11 @@ def create_dataloader(args):
 def create_model(args):
     """Create dynamics world model.
 
-    This function creates a DynamicsWorldModel with proper tokenizer configuration.
-    The tokenizer is required to encode/decode video frames to/from latent space.
+    This function creates a DynamicsWorldModel with proper configuration including:
+    - Tokenizer: Wan2pt1 VAE for video encoding/decoding
+    - Net: MinimalV1LVGDiT backbone (2B configuration)
+    - Conditioner: Video prediction conditioner
+    - Dynamics head: DETR-style detection head for physics prediction
     """
     from cosmos_predict2._src.predict2.dynamics.models.dynamics_world_model import (
         DynamicsWorldModel,
@@ -193,6 +196,14 @@ def create_model(args):
     )
     from cosmos_predict2._src.imaginaire.lazy_config import LazyCall as L
     from cosmos_predict2._src.predict2.tokenizers.wan2pt1 import Wan2pt1VAEInterface
+    from cosmos_predict2._src.predict2.networks.minimal_v1_lvg_dit import MinimalV1LVGDiT
+    from cosmos_predict2._src.predict2.networks.minimal_v4_dit import SACConfig
+    from cosmos_predict2._src.predict2.conditioner import (
+        GeneralConditioner,
+        ReMapkey,
+        TextAttr,
+        BooleanFlag,
+    )
 
     # Load dynamics stats
     stats = load_dynamics_stats(args.dataset_dir)
@@ -221,9 +232,65 @@ def create_model(args):
         chunk_duration=81,
     )
 
+    # Create net config for Cosmos-Predict2.5-2B model
+    # This matches the architecture of the pretrained checkpoint
+    net_config = L(MinimalV1LVGDiT)(
+        max_img_h=240,
+        max_img_w=240,
+        max_frames=128,
+        in_channels=16,
+        out_channels=16,
+        patch_spatial=2,
+        patch_temporal=1,
+        model_channels=2048,  # 2B model
+        num_blocks=28,
+        num_heads=16,  # 2B model
+        concat_padding_mask=True,
+        pos_emb_cls="rope3d",
+        pos_emb_learnable=True,
+        pos_emb_interpolation="crop",
+        use_adaln_lora=True,
+        adaln_lora_dim=256,
+        atten_backend="minimal_a2a",
+        extra_per_block_abs_pos_emb=False,  # 2B model
+        rope_h_extrapolation_ratio=1.0,
+        rope_w_extrapolation_ratio=1.0,
+        rope_t_extrapolation_ratio=1.0,  # 2B model
+        sac_config=SACConfig(),
+    )
+
+    # Create a minimal conditioner config
+    # This handles text embeddings and other conditioning signals
+    conditioner_config = L(GeneralConditioner)(
+        fps=L(ReMapkey)(
+            input_key="fps",
+            output_key="fps",
+            dropout_rate=0.0,
+            dtype=None,
+        ),
+        padding_mask=L(ReMapkey)(
+            input_key="padding_mask",
+            output_key="padding_mask",
+            dropout_rate=0.0,
+            dtype=None,
+        ),
+        text=L(TextAttr)(
+            input_key=["t5_text_embeddings"],
+            dropout_rate=0.2,
+            use_empty_string=False,
+        ),
+        use_video_condition=L(BooleanFlag)(
+            input_key="fps",
+            output_key="use_video_condition",
+            dropout_rate=0.2,
+        ),
+    )
+
     config = DynamicsWorldModelConfig(
-        # Tokenizer configuration
+        # Model components
         tokenizer=tokenizer_config,
+        net=net_config,
+        conditioner=conditioner_config,
 
         # Dynamics head settings
         num_object_queries=args.num_object_queries,
